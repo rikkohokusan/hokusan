@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html, body {
+  background: theme(colors.paper);
+  color: theme(colors.ink);
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Tufte-adjacent — tight, generous whitespace, no decorative chrome. */
+.hk-number {
+  @apply font-semibold tabular-nums tracking-tight;
+}
+
+.hk-card {
+  @apply border border-line bg-white rounded-md p-6;
+}
+
+.hk-label {
+  @apply text-xs uppercase tracking-widest text-muted;
+}
