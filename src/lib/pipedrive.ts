@@ -73,7 +73,9 @@ type RawOrg = Record<string, unknown> & {
   owner_id?: { value: number; name: string } | number | null;
 };
 
-export async function listEnrichedOrgs(limit = 500): Promise<EnrichedOrg[]> {
+// Default limit set high enough to cover all wholesale orgs in one fetch.
+// Pipedrive returns 500/page; this pulls up to 6 pages. Bump if the org table grows past ~3000.
+export async function listEnrichedOrgs(limit = 3000): Promise<EnrichedOrg[]> {
   const fields = await listOrgFields();
   const byName = new Map(fields.map((f) => [f.name.toLowerCase(), f]));
 

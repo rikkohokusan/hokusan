@@ -2,12 +2,13 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Nav } from "@/components/Nav";
 import { BigNumber } from "@/components/BigNumber";
-import { TrendChart } from "@/components/TrendChart";
+import { Sparkline } from "@/components/Sparkline";
 import { createClient } from "@/lib/supabase/server";
 import { listEnrichedOrgs, listOpenDeals, type EnrichedOrg } from "@/lib/pipedrive";
-import { pipedriveOrgUrl } from "@/lib/queue";
+import { filterByBucket, pipedriveOrgUrl } from "@/lib/queue";
+import { GLOSSARY } from "@/lib/glossary";
+import { fetch12WeekTrends } from "@/lib/trends";
 
-// Dynamic — always fresh against Pipedrive and Supabase.
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -36,67 +37,59 @@ type Snapshot = {
 };
 
 export default async function PulsePage() {
-  // 1. Pull last 12 weekly snapshots from Supabase for trends.
   const supabase = await requireAllowedUser();
-  const { data: snapshots, error } = await supabase
+
+  // Weekly snapshots (for historical revenue baseline, still useful as a cross-check)
+  const { data: snapshots } = await supabase
     .from("weekly_snapshots")
-    .select("week_start,revenue_cad,orders_count,new_leads_count,leads_activated_count,trials_graduated_count,dormant_reactivated_count,basket_eroding_count")
+    .select("week_start,revenue_cad,orders_count")
     .order("week_start", { ascending: false })
-    .limit(12);
+    .limit(1);
+  const latest = (snapshots ?? [])[0] as Snapshot | undefined;
 
-  const orderedNewest: Snapshot[] = (snapshots ?? []) as Snapshot[];
-  const orderedOldestToNewest = [...orderedNewest].reverse();
-  const latest = orderedNewest[0];
-  const prior = orderedNewest[1];
-
-  const wowDelta = (a: number | undefined, b: number | undefined) => {
-    if (a == null || b == null) return null;
-    if (b === 0) return null;
-    return (a - b) / b;
-  };
-
-  // 2. Pull live Pipedrive orgs for Lifecycle Bucket counts + anomalies.
+  // Live pulls
   let orgs: EnrichedOrg[] = [];
   let pdErr: string | null = null;
   try {
-    orgs = await listEnrichedOrgs(1000);
+    orgs = await listEnrichedOrgs();
   } catch (e) {
     pdErr = e instanceof Error ? e.message : String(e);
   }
 
+  const vipDormant = filterByBucket(orgs, "vip_dormant");
+  const basketEroding = filterByBucket(orgs, "basket_eroding");
+  const likelyLost = filterByBucket(orgs, "likely_lost");
+  const graduatingTrials = filterByBucket(orgs, "graduating_trial");
+
+  // Lifecycle distribution for the bottom table + data-quality warning
   const bucketCounts = new Map<string, number>();
+  let unclassified = 0;
   for (const o of orgs) {
-    const b = o.lifecycle_bucket ?? "Unknown";
-    bucketCounts.set(b, (bucketCounts.get(b) ?? 0) + 1);
+    if (!o.lifecycle_bucket) {
+      unclassified++;
+      continue;
+    }
+    bucketCounts.set(o.lifecycle_bucket, (bucketCounts.get(o.lifecycle_bucket) ?? 0) + 1);
   }
   const bucketRows = Array.from(bucketCounts.entries()).sort((a, b) => b[1] - a[1]);
+  const unclassifiedShare = orgs.length ? unclassified / orgs.length : 0;
 
-  // 3. Anomaly detection: show top accounts by LTV in each bucket.
-  const sortByLtv = (a: EnrichedOrg, b: EnrichedOrg) =>
-    (b.lifetime_spend_cad ?? 0) - (a.lifetime_spend_cad ?? 0);
-  const vipDormant = orgs
-    .filter((o) => (o.order_count ?? 0) >= 6 && (o.cadence_status === "Dormant" || o.cadence_status === "Likely Lost"))
-    .sort(sortByLtv);
-  const basketEroding = orgs.filter((o) => o.basket_trend === "Eroding").sort(sortByLtv);
-  const likelyLost = orgs.filter((o) => o.cadence_status === "Likely Lost").sort(sortByLtv);
-  const graduatingTrials = orgs
-    .filter(
-      (o) =>
-        o.lifecycle_bucket === "Graduating-Trial" ||
-        ((o.order_count ?? 0) >= 2 && (o.order_count ?? 0) <= 3 && o.cadence_status === "Warm")
-    )
-    .sort(sortByLtv);
+  // 12-week trends (cached 1 hr)
+  let trends: Awaited<ReturnType<typeof fetch12WeekTrends>> | null = null;
+  let trendsErr: string | null = null;
+  try {
+    trends = await fetch12WeekTrends();
+  } catch (e) {
+    trendsErr = e instanceof Error ? e.message : String(e);
+  }
 
-  // 4. Pipeline reference: open deals count + total value.
   let openDealsCount = 0;
   let openDealsValue = 0;
   try {
     const deals = await listOpenDeals(1000);
     openDealsCount = deals.length;
     openDealsValue = deals.reduce((s, d) => s + (d.value || 0), 0);
-  } catch {
-    /* non-fatal */
-  }
+  } catch { /* non-fatal */ }
 
   const cad = (n: number | string | null) =>
     n == null ? "—" : `$${Number(n).toLocaleString("en-CA", { maximumFractionDigits: 0 })}`;
@@ -108,18 +101,77 @@ export default async function PulsePage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Weekly pulse</h1>
           <p className="mt-1 text-sm text-muted">
+            {orgs.length ? `Live across ${orgs.length} enriched orgs` : "Loading…"}
             {latest
-              ? `Week of ${new Date(latest.week_start).toLocaleDateString("en-CA", { month: "short", day: "numeric", year: "numeric" })}`
-              : "No weekly snapshot yet — the Monday sync will write the first one."}
+              ? ` · Latest snapshot: ${new Date(latest.week_start).toLocaleDateString("en-CA", { month: "short", day: "numeric", year: "numeric" })}`
+              : ""}
           </p>
         </div>
 
-        {/* Action lists — real names, not counts */}
+        {/* Data-quality warning — only when meaningful */}
+        {unclassifiedShare > 0.2 ? (
+          <section className="rounded-md border border-warn/50 bg-warn/5 p-4">
+            <div className="flex items-start justify-between gap-6">
+              <div>
+                <div className="text-sm font-medium text-warn">
+                  Data hygiene: {unclassified.toLocaleString()}/{orgs.length.toLocaleString()} accounts
+                  ({Math.round(unclassifiedShare * 100)}%) have no Lifecycle Bucket set
+                </div>
+                <p className="mt-1 text-xs text-muted max-w-2xl">
+                  The enrichment script only assigns lifecycle buckets to orgs it can confidently classify from
+                  Shopify order history. Unclassified accounts are invisible to every bucket tab below.
+                  Fix by tightening Pipedrive tagging (Business Sector, Customer Stage) or linking orgs to their Shopify customer records.
+                </p>
+              </div>
+              <a
+                href="https://hokusanteacanada.pipedrive.com/organizations/list"
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-warn underline underline-offset-2 shrink-0"
+              >
+                Open in Pipedrive →
+              </a>
+            </div>
+          </section>
+        ) : null}
+
+        {/* 12-week business trends */}
+        {trends ? (
+          <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Sparkline
+              label="Weekly revenue"
+              data={trends.revenue}
+              format={(v) => `$${Math.round(v).toLocaleString("en-CA")}`}
+              tooltip="Last 12 weeks of Shopify order totals (voided/refunded excluded). Updated hourly."
+            />
+            <Sparkline
+              label="Weekly orders"
+              data={trends.orders}
+              tooltip="Count of Shopify orders per week. Last 12 weeks."
+            />
+            <Sparkline
+              label="Weekly AOV"
+              data={trends.aov}
+              format={(v) => `$${Math.round(v).toLocaleString("en-CA")}`}
+              tooltip="Average order value per week. Revenue ÷ order count."
+            />
+            <Sparkline
+              label="New leads / wk"
+              data={trends.newLeads}
+              tooltip="New deals added to the Application Form pipeline in Pipedrive."
+            />
+          </section>
+        ) : trendsErr ? (
+          <p className="text-xs text-warn">Trends fetch error: {trendsErr}</p>
+        ) : null}
+
+        {/* Action lists — clickable cards */}
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <AnomalyCard
             title="Dormant VIPs"
             tone="warn"
             hint="6+ orders + dormant/likely-lost — Rikko personal call"
+            tooltip={GLOSSARY["Dormant-VIP"]}
             orgs={vipDormant.slice(0, 5)}
             total={vipDormant.length}
             queueLink="/queue?bucket=vip_dormant"
@@ -127,7 +179,8 @@ export default async function PulsePage() {
           <AnomalyCard
             title="Basket eroding"
             tone="warn"
-            hint="AOV down >25% — hidden-churn signal"
+            hint="Recent AOV down >25% vs baseline — hidden churn signal"
+            tooltip={GLOSSARY["Eroding"]}
             orgs={basketEroding.slice(0, 5)}
             total={basketEroding.length}
             queueLink="/queue?bucket=basket_eroding"
@@ -136,6 +189,7 @@ export default async function PulsePage() {
             title="Graduating trials"
             tone="good"
             hint="2-3 orders, still warm — highest-leverage cross-sell"
+            tooltip={GLOSSARY["Graduating-Trial"]}
             orgs={graduatingTrials.slice(0, 5)}
             total={graduatingTrials.length}
             queueLink="/queue?bucket=graduating_trial"
@@ -144,6 +198,7 @@ export default async function PulsePage() {
             title="Likely lost"
             tone="muted"
             hint="4×+ cadence silent — last-chance batch"
+            tooltip={GLOSSARY["Likely-Lost"]}
             orgs={likelyLost.slice(0, 5)}
             total={likelyLost.length}
             queueLink="/queue?bucket=likely_lost"
@@ -151,63 +206,34 @@ export default async function PulsePage() {
         </section>
         {pdErr ? <p className="text-xs text-warn">Pipedrive fetch error: {pdErr}</p> : null}
 
-        {/* Big numbers row */}
-        <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <BigNumber
-            label="Revenue (CAD)"
-            value={latest?.revenue_cad ?? null}
-            format={(v) => cad(v as number)}
-            delta={wowDelta(latest?.revenue_cad, prior?.revenue_cad)}
-          />
-          <BigNumber
-            label="Orders"
-            value={latest?.orders_count ?? null}
-            delta={wowDelta(latest?.orders_count, prior?.orders_count)}
-          />
-          <BigNumber
-            label="New leads"
-            value={latest?.new_leads_count ?? null}
-            delta={wowDelta(latest?.new_leads_count, prior?.new_leads_count)}
-          />
-          <BigNumber
-            label="Trials graduated"
-            value={latest?.trials_graduated_count ?? null}
-            delta={wowDelta(latest?.trials_graduated_count, prior?.trials_graduated_count)}
-            hint="2-3 → 4+"
-          />
-        </section>
-
-        {/* Trend chart */}
-        {orderedOldestToNewest.length > 1 ? (
-          <section className="hk-card">
-            <div className="flex items-baseline justify-between">
-              <div className="hk-label">Orders, last 12 weeks</div>
-              <div className="text-xs text-muted">{orderedOldestToNewest.length} snapshots</div>
-            </div>
-            <div className="mt-4">
-              <TrendChart
-                data={orderedOldestToNewest.map((s) => ({
-                  label: new Date(s.week_start).toLocaleDateString("en-CA", { month: "short", day: "numeric" }),
-                  value: s.orders_count ?? 0,
-                }))}
-              />
-            </div>
-          </section>
-        ) : null}
-
-        {/* Lifecycle bucket breakdown */}
+        {/* Lifecycle bucket breakdown — rows are drill-throughs */}
         <section className="hk-card">
           <div className="flex items-baseline justify-between">
-            <div className="hk-label">Accounts by Lifecycle Bucket</div>
-            <div className="text-xs text-muted">{orgs.length} enriched orgs</div>
+            <div className="hk-label">
+              Accounts by Lifecycle Bucket
+              <span className="ml-1 text-muted cursor-help" title={GLOSSARY["Lifecycle Bucket"]}>ⓘ</span>
+            </div>
+            <div className="text-xs text-muted">
+              {orgs.length} enriched · {unclassified} unclassified
+            </div>
           </div>
           <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-3 text-sm">
-            {bucketRows.map(([bucket, count]) => (
-              <div key={bucket} className="flex items-baseline justify-between border-b border-line pb-1">
-                <span className="text-muted">{bucket}</span>
-                <span className="hk-number">{count}</span>
-              </div>
-            ))}
+            {bucketRows.map(([bucket, count]) => {
+              const bucketKey = bucketToQueueKey(bucket);
+              const row = (
+                <div className="flex items-baseline justify-between border-b border-line pb-1">
+                  <span className="text-muted" title={GLOSSARY[bucket]}>{bucket}</span>
+                  <span className="hk-number">{count}</span>
+                </div>
+              );
+              return bucketKey ? (
+                <Link key={bucket} href={`/queue?bucket=${bucketKey}`} className="hover:text-ink">
+                  {row}
+                </Link>
+              ) : (
+                <div key={bucket}>{row}</div>
+              );
+            })}
           </div>
         </section>
 
@@ -225,9 +251,9 @@ export default async function PulsePage() {
           <div className="hk-card">
             <div className="hk-label">Errors this session</div>
             <div className="mt-2 text-xs text-muted">
-              {error ? `Supabase: ${error.message}` : null}
               {pdErr ? <div>Pipedrive: {pdErr}</div> : null}
-              {!error && !pdErr ? "None." : null}
+              {trendsErr ? <div>Trends: {trendsErr}</div> : null}
+              {!pdErr && !trendsErr ? "None." : null}
             </div>
           </div>
         </section>
@@ -236,8 +262,8 @@ export default async function PulsePage() {
           <section className="hk-card border-warn/40">
             <div className="hk-label text-warn">Setup pending</div>
             <p className="mt-2 text-sm">
-              No weekly snapshots found. The sync job writes the first row on the next Monday 07:00 America/Toronto run
-              — or trigger it manually with <code>npm run sync:weekly</code>.
+              No weekly snapshots in Supabase yet. Trend charts above pull live from Shopify. Monday&apos;s sync will
+              backfill the weekly_snapshots table.
             </p>
           </section>
         ) : null}
@@ -246,10 +272,23 @@ export default async function PulsePage() {
   );
 }
 
+// Map Pipedrive lifecycle enum label → /queue bucket tab key. Only ones that map to a bucket tab.
+function bucketToQueueKey(bucket: string): string | null {
+  switch (bucket) {
+    case "Dormant-VIP": return "vip_dormant";
+    case "At-Risk": return "at_risk";
+    case "Graduating-Trial": return "graduating_trial";
+    case "First-Time": return "first_to_second";
+    case "Likely-Lost": return "likely_lost";
+    default: return null;
+  }
+}
+
 function AnomalyCard({
   title,
   tone,
   hint,
+  tooltip,
   orgs,
   total,
   queueLink,
@@ -257,6 +296,7 @@ function AnomalyCard({
   title: string;
   tone: "warn" | "good" | "muted";
   hint: string;
+  tooltip?: string;
   orgs: EnrichedOrg[];
   total: number;
   queueLink: string;
@@ -266,10 +306,13 @@ function AnomalyCard({
     n == null ? "—" : `$${Number(n).toLocaleString("en-CA", { maximumFractionDigits: 0 })}`;
 
   return (
-    <div className="hk-card">
+    <Link href={queueLink} className="block hk-card transition hover:border-accent hover:shadow-sm">
       <div className="flex items-baseline justify-between">
         <div>
-          <div className={`hk-label ${toneClass}`}>{title}</div>
+          <div className={`hk-label ${toneClass}`} title={tooltip}>
+            {title}
+            {tooltip ? <span className="ml-1 text-muted cursor-help">ⓘ</span> : null}
+          </div>
           <p className="mt-1 text-xs text-muted">{hint}</p>
         </div>
         <div className="hk-number text-2xl">{total}</div>
@@ -286,6 +329,7 @@ function AnomalyCard({
                 rel="noreferrer"
                 className="truncate hover:underline"
                 title={o.name}
+                onClick={(e) => e.stopPropagation()}
               >
                 {o.name}
               </a>
@@ -297,10 +341,8 @@ function AnomalyCard({
         </ul>
       )}
       {total > orgs.length ? (
-        <Link href={queueLink} className="mt-4 block text-xs text-accent hover:underline">
-          View all {total} →
-        </Link>
+        <div className="mt-4 text-xs text-accent">View all {total} →</div>
       ) : null}
-    </div>
+    </Link>
   );
 }

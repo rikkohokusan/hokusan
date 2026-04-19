@@ -4,6 +4,7 @@ import { Nav } from "@/components/Nav";
 import { createClient } from "@/lib/supabase/server";
 import { listEnrichedOrgs, type EnrichedOrg } from "@/lib/pipedrive";
 import { pipedriveOrgUrl } from "@/lib/queue";
+import { GLOSSARY } from "@/lib/glossary";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -31,13 +32,22 @@ export default async function CampaignsPage({
   let orgs: EnrichedOrg[] = [];
   let err: string | null = null;
   try {
-    orgs = await listEnrichedOrgs(2000);
+    orgs = await listEnrichedOrgs();
   } catch (e) {
     err = e instanceof Error ? e.message : String(e);
   }
 
-  const groups = groupOrgs(orgs, groupBy);
+  // Separate the "unclassified" bucket/sector/category into its own data-quality warning
+  const UNCLASSIFIED_LABELS = new Set(["(unassigned)", "(unknown sector)", "(unclassified)"]);
+  const allGroups = groupOrgs(orgs, groupBy);
+  const groups = allGroups.filter((g) => !UNCLASSIFIED_LABELS.has(g.label));
+  const unclassified = allGroups.find((g) => UNCLASSIFIED_LABELS.has(g.label));
+  const unclassifiedShare = orgs.length ? (unclassified?.count ?? 0) / orgs.length : 0;
+
   const cad = (n: number) => `$${Math.round(n).toLocaleString("en-CA")}`;
+
+  const groupLabel =
+    groupBy === "bucket" ? "lifecycle bucket" : groupBy === "sector" ? "business sector" : "top product category";
 
   return (
     <>
@@ -46,7 +56,7 @@ export default async function CampaignsPage({
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Campaign segments</h1>
           <p className="mt-1 text-sm text-muted">
-            Segment briefs for marketing. Click a segment to see the account list + export emails.
+            Segment briefs for marketing. Click a segment to see the account list + draft outreach.
           </p>
         </div>
 
@@ -68,44 +78,63 @@ export default async function CampaignsPage({
 
         {err ? <p className="text-sm text-warn">Pipedrive: {err}</p> : null}
 
+        {/* Data-quality warning */}
+        {unclassified && unclassifiedShare > 0.2 ? (
+          <section className="rounded-md border border-warn/50 bg-warn/5 p-4">
+            <div className="text-sm font-medium text-warn">
+              {unclassified.count.toLocaleString()} accounts ({Math.round(unclassifiedShare * 100)}%) have no {groupLabel} set
+            </div>
+            <p className="mt-1 text-xs text-muted max-w-2xl">
+              Untagged accounts are invisible to every segment below — marketing can&apos;t include them in a campaign
+              until they&apos;re classified. Fix in Pipedrive by setting {groupLabel} on each org.
+            </p>
+          </section>
+        ) : null}
+
         {/* Segment grid */}
         <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {groups.map((g) => (
-            <Link
-              key={g.label}
-              href={`/campaigns?group=${groupBy}&focus=${encodeURIComponent(g.label)}`}
-              className={
-                "hk-card transition hover:border-accent hover:shadow-sm " +
-                (focus === g.label ? "border-accent" : "")
-              }
-            >
-              <div className="flex items-baseline justify-between">
-                <h3 className="font-medium text-sm">{g.label}</h3>
-                <span className="hk-number text-2xl">{g.count}</span>
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted">
-                <span>LTV</span>
-                <span className="text-right text-ink">{cad(g.totalLtv)}</span>
-                <span>Avg AOV</span>
-                <span className="text-right text-ink">{cad(g.avgAov)}</span>
-                <span>Avg orders</span>
-                <span className="text-right text-ink">{g.avgOrders.toFixed(1)}</span>
-                {g.topSector ? (
-                  <>
-                    <span>Top sector</span>
-                    <span className="text-right text-ink truncate">{g.topSector}</span>
-                  </>
-                ) : null}
-                {g.topCategory ? (
-                  <>
-                    <span>Top product</span>
-                    <span className="text-right text-ink truncate">{g.topCategory}</span>
-                  </>
-                ) : null}
-              </div>
-              <p className="mt-3 text-xs">{g.angle}</p>
-            </Link>
-          ))}
+          {groups.map((g) => {
+            const bucketTip = groupBy === "bucket" ? GLOSSARY[g.label] : undefined;
+            return (
+              <Link
+                key={g.label}
+                href={`/campaigns?group=${groupBy}&focus=${encodeURIComponent(g.label)}`}
+                className={
+                  "hk-card transition hover:border-accent hover:shadow-sm " +
+                  (focus === g.label ? "border-accent" : "")
+                }
+              >
+                <div className="flex items-baseline justify-between">
+                  <h3 className="font-medium text-sm" title={bucketTip}>
+                    {g.label}
+                    {bucketTip ? <span className="ml-1 text-muted cursor-help">ⓘ</span> : null}
+                  </h3>
+                  <span className="hk-number text-2xl">{g.count}</span>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted">
+                  <span>LTV</span>
+                  <span className="text-right text-ink">{cad(g.totalLtv)}</span>
+                  <span>Avg AOV</span>
+                  <span className="text-right text-ink">{cad(g.avgAov)}</span>
+                  <span>Avg orders</span>
+                  <span className="text-right text-ink">{g.avgOrders.toFixed(1)}</span>
+                  {g.topSector ? (
+                    <>
+                      <span>Top sector</span>
+                      <span className="text-right text-ink truncate">{g.topSector}</span>
+                    </>
+                  ) : null}
+                  {g.topCategory ? (
+                    <>
+                      <span>Top product</span>
+                      <span className="text-right text-ink truncate">{g.topCategory}</span>
+                    </>
+                  ) : null}
+                </div>
+                <p className="mt-3 text-xs">{g.angle}</p>
+              </Link>
+            );
+          })}
         </section>
 
         {/* Focused segment — account list */}
@@ -227,12 +256,20 @@ function FocusPanel({ groups, focus, groupBy }: { groups: Segment[]; focus: stri
 
   return (
     <section className="hk-card">
-      <div className="flex items-baseline justify-between">
+      <div className="flex items-baseline justify-between gap-4">
         <div>
           <div className="hk-label">{groupBy === "bucket" ? "Lifecycle" : groupBy === "sector" ? "Sector" : "Product"}</div>
           <h2 className="mt-1 text-lg font-semibold">{seg.label}</h2>
+          <div className="mt-1 text-xs text-muted">{seg.count} accounts · {cad(seg.totalLtv)} total LTV</div>
         </div>
-        <div className="text-xs text-muted">{seg.count} accounts · {cad(seg.totalLtv)} total LTV</div>
+        <button
+          type="button"
+          disabled
+          title="Draft generation requires an Anthropic API key — not yet configured"
+          className="rounded-md bg-muted/30 text-muted px-3 py-1.5 text-xs cursor-not-allowed"
+        >
+          Draft outreach (coming soon)
+        </button>
       </div>
       <p className="mt-2 text-sm">{seg.angle}</p>
 
