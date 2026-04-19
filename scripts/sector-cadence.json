@@ -1,0 +1,75 @@
+{
+  "computed_at": "2026-04-18T19:12:46.208Z",
+  "method": "median of per-account median gaps; customers with 4+ orders; sector via Pipedrive Business Sector cross-reference",
+  "note": "Recompute quarterly. Personal cadence overrides sector fallback when account has 4+ orders. CAVEAT: only 10.3% of Pipedrive orgs have Business Sector populated — table is thin for many sectors.",
+  "mapped_customers": 82,
+  "unmapped_customers": 214,
+  "sectors": {
+    "Cafe": {
+      "n_accounts": 64,
+      "median_days": 27,
+      "p25": 19,
+      "p75": 43
+    },
+    "Cake": {
+      "n_accounts": 4,
+      "median_days": 54,
+      "p25": 23,
+      "p75": 83
+    },
+    "Ice cream": {
+      "n_accounts": 4,
+      "median_days": 64,
+      "p25": 16,
+      "p75": 178
+    },
+    "Tea Shop": {
+      "n_accounts": 3,
+      "median_days": 27,
+      "p25": 25,
+      "p75": 65
+    },
+    "Pop-up / Event Catering / Mobile Cart": {
+      "n_accounts": 2,
+      "median_days": 28,
+      "p25": 13,
+      "p75": 28
+    },
+    "Coffee Roaster": {
+      "n_accounts": 1,
+      "median_days": 11,
+      "p25": 11,
+      "p75": 11
+    },
+    "Vietnamese Cafe": {
+      "n_accounts": 1,
+      "median_days": 61,
+      "p25": 61,
+      "p75": 61
+    },
+    "Retail Store": {
+      "n_accounts": 1,
+      "median_days": 7,
+      "p25": 7,
+      "p75": 7
+    },
+    "Donuts": {
+      "n_accounts": 1,
+      "median_days": 64,
+      "p25": 64,
+      "p75": 64
+    },
+    "Bubble tea": {
+      "n_accounts": 1,
+      "median_days": 48,
+      "p25": 48,
+      "p75": 48
+    },
+    "_overall_fallback": {
+      "n_accounts": 296,
+      "median_days": 41,
+      "p25": 23,
+      "p75": 68
+    }
+  }
+}

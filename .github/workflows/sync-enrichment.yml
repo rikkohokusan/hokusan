@@ -1,0 +1,28 @@
+name: Daily Pipedrive enrichment
+
+# Refresh the 11 enriched fields on every wholesale Pipedrive org.
+# Runs every morning 06:00 America/Toronto (10:00 UTC during EDT, 11:00 UTC during EST).
+# Picks up overnight Shopify orders so sales/marketing see fresh cadence, LTV, basket trend.
+
+on:
+  schedule:
+    - cron: "0 10 * * *"
+  workflow_dispatch:
+
+jobs:
+  enrich:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run enrichment
+        env:
+          PIPEDRIVE_API_TOKEN: ${{ secrets.PIPEDRIVE_API_TOKEN }}
+          PIPEDRIVE_DOMAIN: ${{ secrets.PIPEDRIVE_DOMAIN }}
+          SHOPIFY_STORE_DOMAIN: ${{ secrets.SHOPIFY_STORE_DOMAIN }}
+          SHOPIFY_ACCESS_TOKEN: ${{ secrets.SHOPIFY_ACCESS_TOKEN }}
+        run: node scripts/sync-pipedrive-enrichment.mjs
