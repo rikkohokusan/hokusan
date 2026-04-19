@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { listEnrichedOrgs, type EnrichedOrg } from "@/lib/pipedrive";
 import { pipedriveOrgUrl } from "@/lib/queue";
 import { GLOSSARY } from "@/lib/glossary";
+import { buildSegmentPrompt } from "@/lib/promptTemplates";
+import { DraftPromptButton } from "@/components/DraftPromptButton";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -262,14 +264,20 @@ function FocusPanel({ groups, focus, groupBy }: { groups: Segment[]; focus: stri
           <h2 className="mt-1 text-lg font-semibold">{seg.label}</h2>
           <div className="mt-1 text-xs text-muted">{seg.count} accounts · {cad(seg.totalLtv)} total LTV</div>
         </div>
-        <button
-          type="button"
-          disabled
-          title="Draft generation requires an Anthropic API key — not yet configured"
-          className="rounded-md bg-muted/30 text-muted px-3 py-1.5 text-xs cursor-not-allowed"
-        >
-          Draft outreach (coming soon)
-        </button>
+        <DraftPromptButton
+          segmentLabel={seg.label}
+          prompt={buildSegmentPrompt({
+            label: seg.label,
+            groupBy,
+            count: seg.count,
+            totalLtv: seg.totalLtv,
+            avgAov: seg.avgAov,
+            avgOrders: seg.avgOrders,
+            topSector: seg.topSector,
+            topCategory: seg.topCategory,
+            orgs: seg.orgs.slice(0, 10),
+          })}
+        />
       </div>
       <p className="mt-2 text-sm">{seg.angle}</p>
 

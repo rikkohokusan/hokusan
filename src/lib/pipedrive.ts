@@ -168,6 +168,20 @@ export type OpenDealSummary = {
   update_time: string;
 };
 
+// -- Pipedrive users (for owner filter on /queue) --
+export type PdUser = {
+  id: number;
+  name: string;
+  email: string;
+  active_flag: boolean;
+  is_you: boolean;
+};
+
+export async function listPipedriveUsers(): Promise<PdUser[]> {
+  const users = (await pd<PdUser[]>("/users")) || [];
+  return users.filter((u) => u.active_flag);
+}
+
 export async function listOpenDeals(limit = 500): Promise<OpenDealSummary[]> {
   const out: OpenDealSummary[] = [];
   let start = 0;

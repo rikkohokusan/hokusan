@@ -2,24 +2,14 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Nav } from "@/components/Nav";
 import { createClient } from "@/lib/supabase/server";
-import { listEnrichedOrgs } from "@/lib/pipedrive";
+import { listEnrichedOrgs, listPipedriveUsers } from "@/lib/pipedrive";
 import { QUEUE_BUCKETS, filterByBucket, bucketCounts, suggestedHook, pipedriveOrgUrl, type QueueBucketKey } from "@/lib/queue";
 import { GLOSSARY } from "@/lib/glossary";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
-// Known sales owners. Rikko first, then alphabetical. hokusan_team is excluded (service account).
-const OWNERS = [
-  { id: "all", label: "All" },
-  { id: "self", label: "Rikko" },
-  { id: "atsuko", label: "Atsuko" },
-  { id: "erina", label: "Erina" },
-  { id: "tomoe", label: "Tomoe" },
-  { id: "yui", label: "Yui" },
-  { id: "unassigned", label: "Unassigned" },
-] as const;
-type OwnerKey = (typeof OWNERS)[number]["id"];
+const HOKUSAN_TEAM_OWNER_ID = 24063619;
 
 export default async function QueuePage({
   searchParams,
@@ -35,41 +25,46 @@ export default async function QueuePage({
   const requestedBucket = (Array.isArray(params.bucket) ? params.bucket[0] : params.bucket) as QueueBucketKey | undefined;
   const activeBucket: QueueBucketKey = QUEUE_BUCKETS.find((b) => b.key === requestedBucket)?.key ?? "vip_dormant";
 
-  const requestedOwner = (Array.isArray(params.owner) ? params.owner[0] : params.owner) as OwnerKey | undefined;
-  const activeOwner: OwnerKey = OWNERS.find((o) => o.id === requestedOwner)?.id ?? "all";
+  const requestedOwner = Array.isArray(params.owner) ? params.owner[0] : params.owner;
 
+  // Pull live team from Pipedrive, exclude the hokusan_team service account.
   let orgs: Awaited<ReturnType<typeof listEnrichedOrgs>> = [];
+  let users: Awaited<ReturnType<typeof listPipedriveUsers>> = [];
   let err: string | null = null;
   try {
-    orgs = await listEnrichedOrgs();
+    [orgs, users] = await Promise.all([listEnrichedOrgs(), listPipedriveUsers()]);
   } catch (e) {
     err = e instanceof Error ? e.message : String(e);
   }
 
-  // Always exclude the hokusan_team service account (user_id 24063619) from owner-filtered views,
-  // per data-model.md convention. Only show these orgs under "Unassigned" if explicitly requested.
-  const HOKUSAN_TEAM_OWNER_ID = 24063619;
+  const salesTeam = users
+    .filter((u) => u.id !== HOKUSAN_TEAM_OWNER_ID)
+    .sort((a, b) => {
+      // Rikko first, then alphabetical
+      if (/rikko/i.test(a.name)) return -1;
+      if (/rikko/i.test(b.name)) return 1;
+      return a.name.localeCompare(b.name);
+    });
+
+  // Owner filter: "all" | "unassigned" | Pipedrive user id (as string)
+  const validOwnerIds = new Set<string>(["all", "unassigned", ...salesTeam.map((u) => String(u.id))]);
+  const activeOwner = requestedOwner && validOwnerIds.has(requestedOwner) ? requestedOwner : "all";
+
   const filteredByOwner = orgs.filter((o) => {
     if (activeOwner === "all") return o.owner_id !== HOKUSAN_TEAM_OWNER_ID;
     if (activeOwner === "unassigned") return !o.owner_id || o.owner_id === HOKUSAN_TEAM_OWNER_ID;
-    const ownerName = (o.owner_name || "").toLowerCase();
-    if (activeOwner === "self") return ownerName.includes("rikko");
-    return ownerName.includes(activeOwner);
+    return String(o.owner_id) === activeOwner;
   });
 
   const counts = bucketCounts(filteredByOwner);
   const filtered = filterByBucket(filteredByOwner, activeBucket);
   const meta = QUEUE_BUCKETS.find((b) => b.key === activeBucket)!;
 
-  // Owner counts across ALL orgs (unfiltered by bucket) for the top segmented control
-  const ownerCounts: Record<OwnerKey, number> = {
-    all: orgs.filter((o) => o.owner_id !== HOKUSAN_TEAM_OWNER_ID).length,
-    self: orgs.filter((o) => (o.owner_name || "").toLowerCase().includes("rikko")).length,
-    atsuko: orgs.filter((o) => (o.owner_name || "").toLowerCase().includes("atsuko")).length,
-    erina: orgs.filter((o) => (o.owner_name || "").toLowerCase().includes("erina")).length,
-    tomoe: orgs.filter((o) => (o.owner_name || "").toLowerCase().includes("tomoe")).length,
-    yui: orgs.filter((o) => (o.owner_name || "").toLowerCase().includes("yui")).length,
-    unassigned: orgs.filter((o) => !o.owner_id || o.owner_id === HOKUSAN_TEAM_OWNER_ID).length,
+  // Counts per owner pill
+  const countFor = (ownerKey: string) => {
+    if (ownerKey === "all") return orgs.filter((o) => o.owner_id !== HOKUSAN_TEAM_OWNER_ID).length;
+    if (ownerKey === "unassigned") return orgs.filter((o) => !o.owner_id || o.owner_id === HOKUSAN_TEAM_OWNER_ID).length;
+    return orgs.filter((o) => String(o.owner_id) === ownerKey).length;
   };
 
   const cad = (n: number | null) =>
@@ -93,10 +88,14 @@ export default async function QueuePage({
           </div>
         </div>
 
-        {/* Owner filter */}
+        {/* Owner filter — live from Pipedrive */}
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs uppercase tracking-widest text-muted mr-2">Owner</span>
-          {OWNERS.map((o) => (
+          {[
+            { id: "all", label: "All" },
+            ...salesTeam.map((u) => ({ id: String(u.id), label: u.name.split(" ")[0] })),
+            { id: "unassigned", label: "Unassigned" },
+          ].map((o) => (
             <Link
               key={o.id}
               href={keepBucket(o.id)}
@@ -108,7 +107,7 @@ export default async function QueuePage({
               }
             >
               {o.label}
-              <span className="ml-1.5 opacity-60">{ownerCounts[o.id] ?? 0}</span>
+              <span className="ml-1.5 opacity-60">{countFor(o.id)}</span>
             </Link>
           ))}
         </div>
@@ -233,7 +232,11 @@ export default async function QueuePage({
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={12} className="px-4 py-10 text-center text-sm text-muted">
-                    No accounts in this bucket for {activeOwner === "all" ? "the team" : OWNERS.find((o) => o.id === activeOwner)?.label} — healthy signal.
+                    No accounts in this bucket for {
+                      activeOwner === "all" ? "the team"
+                      : activeOwner === "unassigned" ? "unassigned accounts"
+                      : salesTeam.find((u) => String(u.id) === activeOwner)?.name?.split(" ")[0] ?? "this owner"
+                    } — healthy signal.
                   </td>
                 </tr>
               ) : null}
