@@ -1,22 +1,27 @@
 // Compact trend card: big current number + tiny 12-week sparkline beneath.
 
+import { GlossaryPopover } from "./GlossaryPopover";
+
 type Point = { label: string; value: number };
 
 export function Sparkline({
   label,
   data,
   format = (v: number) => v.toLocaleString(),
-  tooltip,
+  termKey,
 }: {
   label: string;
   data: Point[];
   format?: (v: number) => string;
-  tooltip?: string;
+  termKey?: string;
 }) {
   if (!data.length) {
     return (
       <div className="hk-card">
-        <div className="hk-label">{label}</div>
+        <div className="hk-label flex items-center gap-1">
+          {label}
+          {termKey ? <GlossaryPopover term={termKey} /> : null}
+        </div>
         <div className="mt-2 hk-number text-2xl text-muted">—</div>
       </div>
     );
@@ -58,9 +63,9 @@ export function Sparkline({
 
   return (
     <div className="hk-card">
-      <div className="hk-label" title={tooltip}>
+      <div className="hk-label flex items-center gap-1">
         {label}
-        {tooltip ? <span className="ml-1 text-muted cursor-help">ⓘ</span> : null}
+        {termKey ? <GlossaryPopover term={termKey} /> : null}
       </div>
       <div className="mt-2 flex items-baseline gap-2">
         <span className="hk-number text-2xl">{format(last.value)}</span>

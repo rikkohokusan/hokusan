@@ -142,23 +142,23 @@ export default async function PulsePage() {
               label="Weekly revenue"
               data={trends.revenue}
               format={(v) => `$${Math.round(v).toLocaleString("en-CA")}`}
-              tooltip="Last 12 weeks of Shopify order totals (voided/refunded excluded). Updated hourly."
+              termKey="Weekly revenue"
             />
             <Sparkline
               label="Weekly orders"
               data={trends.orders}
-              tooltip="Count of Shopify orders per week. Last 12 weeks."
+              termKey="Weekly orders"
             />
             <Sparkline
               label="Weekly AOV"
               data={trends.aov}
               format={(v) => `$${Math.round(v).toLocaleString("en-CA")}`}
-              tooltip="Average order value per week. Revenue ÷ order count."
+              termKey="Weekly AOV"
             />
             <Sparkline
               label="New leads / wk"
               data={trends.newLeads}
-              tooltip="New deals added to the Application Form pipeline in Pipedrive."
+              termKey="New leads per week"
             />
           </section>
         ) : trendsErr ? (
@@ -307,21 +307,19 @@ function AnomalyCard({
 
   return (
     <div className="hk-card">
-      <div className="flex items-start justify-between gap-2">
-        <Link href={queueLink} className="flex-1 -m-6 p-6 pb-0 rounded-t-md hover:bg-paper/60">
-          <div className="flex items-baseline justify-between">
-            <div>
-              <div className={`hk-label ${toneClass}`}>{title}</div>
-              <p className="mt-1 text-xs text-muted">{hint}</p>
-            </div>
-            <div className="hk-number text-2xl">{total}</div>
+      <div className="flex items-baseline justify-between gap-4">
+        <div className="min-w-0">
+          <div className={`hk-label ${toneClass} inline-flex items-center gap-1`}>
+            {title}
+            {termKey ? <GlossaryPopover term={termKey} /> : null}
           </div>
+          <Link href={queueLink} className="mt-1 block text-xs text-muted hover:text-ink">
+            {hint}
+          </Link>
+        </div>
+        <Link href={queueLink} className="hk-number text-2xl shrink-0 hover:underline">
+          {total}
         </Link>
-        {termKey ? (
-          <div className="shrink-0 -mt-1">
-            <GlossaryPopover term={termKey} />
-          </div>
-        ) : null}
       </div>
       {orgs.length === 0 ? (
         <p className="mt-4 text-sm text-muted">Nothing urgent here.</p>

@@ -157,6 +157,32 @@ export const GLOSSARY: Record<string, Explainer> = {
   },
 
   // ---------------- Computed concepts ----------------
+  // ---------------- Sparkline metrics on /pulse ----------------
+  "Weekly revenue": {
+    what: "Total money from Shopify orders each week, in Canadian dollars.",
+    why: "This is the cleanest view of how the business is trending. Voided and refunded orders are not counted.",
+    example: "If this week shows $96,879 and the arrow is green, revenue is up from the past four weeks.",
+    action: "Compare to the 4-week trend. If it's trending down, check the Basket Eroding and At-Risk buckets to see who's buying less.",
+  },
+  "Weekly orders": {
+    what: "How many orders we got each week, no matter the size.",
+    why: "Tells you if we are shipping more or fewer packages. Useful alongside AOV to see if the business is growing through bigger orders or more orders.",
+    example: "96 orders this week, up 32% from the last 4-week average.",
+    action: "If orders go up but revenue stays flat, AOV is shrinking — check Basket Eroding.",
+  },
+  "Weekly AOV": {
+    what: "Average Order Value — total revenue divided by number of orders.",
+    why: "Tells you how much a typical customer is spending per order. If AOV drops while orders are steady, customers are buying smaller baskets.",
+    example: "AOV of $1,009 means each wholesale order averages about a thousand dollars.",
+    action: "Falling AOV is a hidden-churn signal. Cross-check with the Basket Eroding card.",
+  },
+  "New leads per week": {
+    what: "How many new deals were added to the Application Form pipeline in Pipedrive each week.",
+    why: "This is the top of the sales funnel. Fewer new leads this month means less revenue 2-3 months from now.",
+    example: "22 new leads this week, down 25% from the 4-week trend.",
+    action: "If leads are dropping, review marketing — website form, referrals, outbound activity.",
+  },
+
   "Personal Cadence": {
     what: "The normal number of days between this customer's orders.",
     why: "Every customer has their own rhythm. We measure each one against their own pattern, not a one-size-fits-all rule.",

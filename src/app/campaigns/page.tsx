@@ -107,14 +107,10 @@ export default async function CampaignsPage({
                   "hk-card flex flex-col " + (focus === g.label ? "border-accent" : "")
                 }
               >
-                <Link
-                  href={drillHref}
-                  className="block -m-6 p-6 pb-0 rounded-t-md hover:bg-paper/60 flex-1"
-                >
+                {/* Header + stats + angle — clickable drill area */}
+                <Link href={drillHref} className="block flex-1 hover:text-ink">
                   <div className="flex items-baseline justify-between gap-2">
-                    <h3 className="font-medium text-sm inline-flex items-center gap-1">
-                      {g.label}
-                    </h3>
+                    <h3 className="font-medium text-sm">{g.label}</h3>
                     <span className="hk-number text-2xl">{g.count}</span>
                   </div>
                   <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted">
@@ -137,9 +133,10 @@ export default async function CampaignsPage({
                       </>
                     ) : null}
                   </div>
-                  <p className="mt-3 text-xs">{g.angle}</p>
+                  <p className="mt-3 text-xs text-muted">{g.angle}</p>
                 </Link>
 
+                {/* Divider + action row — outside the Link so nested interactive works */}
                 <div className="mt-4 pt-3 border-t border-line flex items-center justify-between gap-2">
                   {showGlossary ? (
                     <GlossaryPopover term={g.label} label="What is this?" className="text-xs text-muted" />
