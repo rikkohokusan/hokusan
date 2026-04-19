@@ -32,18 +32,6 @@ export function LoginForm() {
     setSent(true);
   }
 
-  async function signInWithGoogle() {
-    const supabase = createClient();
-    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(
-      params.get("next") || "/pulse"
-    )}`;
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo, queryParams: { prompt: "select_account" } },
-    });
-    if (error) setErr(error.message);
-  }
-
   return (
     <>
       {errorReason === "not_allowed" ? (
@@ -54,30 +42,22 @@ export function LoginForm() {
         <p className="mt-4 text-sm text-warn">Sign-in link expired or invalid. Try again.</p>
       ) : null}
 
-      <div className="mt-6 space-y-3">
-        <button
-          onClick={signInWithGoogle}
-          className="w-full rounded-md border border-line py-2 text-sm hover:bg-paper"
-          type="button"
-        >
-          Continue with Google
-        </button>
-
-        <div className="flex items-center gap-3 text-xs text-muted">
-          <span className="flex-1 border-t border-line" />
-          or
-          <span className="flex-1 border-t border-line" />
-        </div>
-
+      <div className="mt-6">
         {sent ? (
-          <p className="text-sm text-good">
-            Check <strong>{email}</strong> for a magic link.
-          </p>
+          <div className="space-y-2">
+            <p className="text-sm text-good">
+              Link sent to <strong>{email}</strong>.
+            </p>
+            <p className="text-xs text-muted">
+              Open the email on this device and click the sign-in link. It expires in 60 minutes.
+            </p>
+          </div>
         ) : (
           <form onSubmit={sendMagicLink} className="space-y-3">
             <input
               type="email"
               required
+              autoFocus
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@hokusan.ca"
@@ -88,7 +68,7 @@ export function LoginForm() {
               className="w-full rounded-md bg-accent text-white py-2 text-sm disabled:opacity-60"
               type="submit"
             >
-              {busy ? "Sending…" : "Email me a magic link"}
+              {busy ? "Sending…" : "Email me a sign-in link"}
             </button>
             {err ? <p className="text-sm text-warn">{err}</p> : null}
           </form>
