@@ -61,6 +61,7 @@ export type EnrichedOrg = {
   last_order_date: string | null;
   basket_trend: string | null;
   top_product_category: string | null;
+  last_3_orders_summary: string | null;
   business_sector: string | null;
   owner_id: number | null;
   owner_name: string | null;
@@ -87,6 +88,7 @@ export async function listEnrichedOrgs(limit = 500): Promise<EnrichedOrg[]> {
   const k_last_order = k("Last Order Date");
   const k_basket = k("Basket Trend");
   const k_top_cat = k("Top Product Category");
+  const k_last3 = k("Last 3 Orders Summary");
   const k_sector = k("Business Sector");
 
   const out: EnrichedOrg[] = [];
@@ -112,6 +114,7 @@ export async function listEnrichedOrgs(limit = 500): Promise<EnrichedOrg[]> {
         last_order_date: toStr(k_last_order ? raw[k_last_order] : null),
         basket_trend: await labelFor(byName, k_basket, raw),
         top_product_category: await labelFor(byName, k_top_cat, raw),
+        last_3_orders_summary: toStr(k_last3 ? raw[k_last3] : null),
         business_sector: await labelFor(byName, k_sector, raw),
         owner_id: owner?.value ?? null,
         owner_name: owner?.name ?? null,

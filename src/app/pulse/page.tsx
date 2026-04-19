@@ -1,9 +1,11 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { Nav } from "@/components/Nav";
 import { BigNumber } from "@/components/BigNumber";
 import { TrendChart } from "@/components/TrendChart";
 import { createClient } from "@/lib/supabase/server";
 import { listEnrichedOrgs, listOpenDeals, type EnrichedOrg } from "@/lib/pipedrive";
+import { pipedriveOrgUrl } from "@/lib/queue";
 
 // Dynamic — always fresh against Pipedrive and Supabase.
 export const runtime = "edge";
@@ -69,30 +71,21 @@ export default async function PulsePage() {
   }
   const bucketRows = Array.from(bucketCounts.entries()).sort((a, b) => b[1] - a[1]);
 
-  // 3. Anomaly detection: VIPs (6+ orders) newly dormant or basket-eroding.
-  const vipDormant = orgs.filter(
-    (o) => (o.order_count ?? 0) >= 6 && (o.cadence_status === "Dormant" || o.cadence_status === "Likely Lost")
-  );
-  const basketEroding = orgs.filter((o) => o.basket_trend === "Eroding");
-  const likelyLost = orgs.filter((o) => o.cadence_status === "Likely Lost");
-
-  let anomalies: string[] = [];
-  if (vipDormant.length > 0) {
-    anomalies.push(
-      `${vipDormant.length} VIP${vipDormant.length === 1 ? "" : "s"} (6+ orders) past 2.5× cadence — personal call.`
-    );
-  }
-  if (basketEroding.length > 0) {
-    anomalies.push(
-      `${basketEroding.length} account${basketEroding.length === 1 ? "" : "s"} basket-eroding (recent AOV ↓ >25%) — hidden-churn signal.`
-    );
-  }
-  if (likelyLost.length > 0) {
-    anomalies.push(
-      `${likelyLost.length} account${likelyLost.length === 1 ? "" : "s"} in Likely-Lost tier — consider a reactivation sprint.`
-    );
-  }
-  if (anomalies.length === 0) anomalies.push("No lifecycle anomalies this pull — queue discipline is working.");
+  // 3. Anomaly detection: show top accounts by LTV in each bucket.
+  const sortByLtv = (a: EnrichedOrg, b: EnrichedOrg) =>
+    (b.lifetime_spend_cad ?? 0) - (a.lifetime_spend_cad ?? 0);
+  const vipDormant = orgs
+    .filter((o) => (o.order_count ?? 0) >= 6 && (o.cadence_status === "Dormant" || o.cadence_status === "Likely Lost"))
+    .sort(sortByLtv);
+  const basketEroding = orgs.filter((o) => o.basket_trend === "Eroding").sort(sortByLtv);
+  const likelyLost = orgs.filter((o) => o.cadence_status === "Likely Lost").sort(sortByLtv);
+  const graduatingTrials = orgs
+    .filter(
+      (o) =>
+        o.lifecycle_bucket === "Graduating-Trial" ||
+        ((o.order_count ?? 0) >= 2 && (o.order_count ?? 0) <= 3 && o.cadence_status === "Warm")
+    )
+    .sort(sortByLtv);
 
   // 4. Pipeline reference: open deals count + total value.
   let openDealsCount = 0;
@@ -121,19 +114,42 @@ export default async function PulsePage() {
           </p>
         </div>
 
-        {/* Anomalies-first, per brief */}
-        <section className="hk-card">
-          <div className="hk-label">Anomalies</div>
-          <ul className="mt-3 space-y-2">
-            {anomalies.map((a, i) => (
-              <li key={i} className="text-sm">
-                <span className="mr-2 text-warn">•</span>
-                {a}
-              </li>
-            ))}
-          </ul>
-          {pdErr ? <p className="mt-3 text-xs text-warn">Pipedrive fetch error: {pdErr}</p> : null}
+        {/* Action lists — real names, not counts */}
+        <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <AnomalyCard
+            title="Dormant VIPs"
+            tone="warn"
+            hint="6+ orders + dormant/likely-lost — Rikko personal call"
+            orgs={vipDormant.slice(0, 5)}
+            total={vipDormant.length}
+            queueLink="/queue?bucket=vip_dormant"
+          />
+          <AnomalyCard
+            title="Basket eroding"
+            tone="warn"
+            hint="AOV down >25% — hidden-churn signal"
+            orgs={basketEroding.slice(0, 5)}
+            total={basketEroding.length}
+            queueLink="/queue?bucket=basket_eroding"
+          />
+          <AnomalyCard
+            title="Graduating trials"
+            tone="good"
+            hint="2-3 orders, still warm — highest-leverage cross-sell"
+            orgs={graduatingTrials.slice(0, 5)}
+            total={graduatingTrials.length}
+            queueLink="/queue?bucket=graduating_trial"
+          />
+          <AnomalyCard
+            title="Likely lost"
+            tone="muted"
+            hint="4×+ cadence silent — last-chance batch"
+            orgs={likelyLost.slice(0, 5)}
+            total={likelyLost.length}
+            queueLink="/queue?bucket=likely_lost"
+          />
         </section>
+        {pdErr ? <p className="text-xs text-warn">Pipedrive fetch error: {pdErr}</p> : null}
 
         {/* Big numbers row */}
         <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -227,5 +243,64 @@ export default async function PulsePage() {
         ) : null}
       </main>
     </>
+  );
+}
+
+function AnomalyCard({
+  title,
+  tone,
+  hint,
+  orgs,
+  total,
+  queueLink,
+}: {
+  title: string;
+  tone: "warn" | "good" | "muted";
+  hint: string;
+  orgs: EnrichedOrg[];
+  total: number;
+  queueLink: string;
+}) {
+  const toneClass = tone === "warn" ? "text-warn" : tone === "good" ? "text-good" : "text-muted";
+  const cad = (n: number | null) =>
+    n == null ? "—" : `$${Number(n).toLocaleString("en-CA", { maximumFractionDigits: 0 })}`;
+
+  return (
+    <div className="hk-card">
+      <div className="flex items-baseline justify-between">
+        <div>
+          <div className={`hk-label ${toneClass}`}>{title}</div>
+          <p className="mt-1 text-xs text-muted">{hint}</p>
+        </div>
+        <div className="hk-number text-2xl">{total}</div>
+      </div>
+      {orgs.length === 0 ? (
+        <p className="mt-4 text-sm text-muted">Nothing urgent here.</p>
+      ) : (
+        <ul className="mt-4 space-y-2 text-sm">
+          {orgs.map((o) => (
+            <li key={o.id} className="flex items-baseline justify-between gap-4 border-b border-line pb-2 last:border-0">
+              <a
+                href={pipedriveOrgUrl(o.id)}
+                target="_blank"
+                rel="noreferrer"
+                className="truncate hover:underline"
+                title={o.name}
+              >
+                {o.name}
+              </a>
+              <span className="shrink-0 text-xs text-muted tabular-nums">
+                {cad(o.lifetime_spend_cad)} · {o.days_since_last_order ?? "—"}d
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {total > orgs.length ? (
+        <Link href={queueLink} className="mt-4 block text-xs text-accent hover:underline">
+          View all {total} →
+        </Link>
+      ) : null}
+    </div>
   );
 }
