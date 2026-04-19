@@ -306,17 +306,20 @@ function AnomalyCard({
     n == null ? "—" : `$${Number(n).toLocaleString("en-CA", { maximumFractionDigits: 0 })}`;
 
   return (
-    <Link href={queueLink} className="block hk-card transition hover:border-accent hover:shadow-sm">
-      <div className="flex items-baseline justify-between">
-        <div>
-          <div className={`hk-label ${toneClass}`} title={tooltip}>
-            {title}
-            {tooltip ? <span className="ml-1 text-muted cursor-help">ⓘ</span> : null}
+    <div className="hk-card">
+      {/* Header is the drill-through link. Account list below uses plain <a> tags to Pipedrive. */}
+      <Link href={queueLink} className="block -m-6 p-6 pb-2 rounded-t-md hover:bg-paper/60">
+        <div className="flex items-baseline justify-between">
+          <div>
+            <div className={`hk-label ${toneClass}`} title={tooltip}>
+              {title}
+              {tooltip ? <span className="ml-1 text-muted cursor-help">ⓘ</span> : null}
+            </div>
+            <p className="mt-1 text-xs text-muted">{hint}</p>
           </div>
-          <p className="mt-1 text-xs text-muted">{hint}</p>
+          <div className="hk-number text-2xl">{total}</div>
         </div>
-        <div className="hk-number text-2xl">{total}</div>
-      </div>
+      </Link>
       {orgs.length === 0 ? (
         <p className="mt-4 text-sm text-muted">Nothing urgent here.</p>
       ) : (
@@ -329,7 +332,6 @@ function AnomalyCard({
                 rel="noreferrer"
                 className="truncate hover:underline"
                 title={o.name}
-                onClick={(e) => e.stopPropagation()}
               >
                 {o.name}
               </a>
@@ -341,8 +343,10 @@ function AnomalyCard({
         </ul>
       )}
       {total > orgs.length ? (
-        <div className="mt-4 text-xs text-accent">View all {total} →</div>
+        <Link href={queueLink} className="mt-4 inline-block text-xs text-accent hover:underline">
+          View all {total} in queue →
+        </Link>
       ) : null}
-    </Link>
+    </div>
   );
 }

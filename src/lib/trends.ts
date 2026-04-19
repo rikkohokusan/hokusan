@@ -100,7 +100,7 @@ async function fetchShopifyOrders(sinceIso: string, untilIso: string): Promise<S
   while (url) {
     const res: Response = await fetch(url, {
       headers: { "X-Shopify-Access-Token": SHOP_TOKEN, Accept: "application/json" },
-      next: { revalidate: 3600 }, // cache 1 hour at the edge
+      cache: "no-store", // responses are often >2MB — exceeds Next.js data cache limit
     });
     if (!res.ok) throw new Error(`Shopify orders failed: ${res.status}`);
     const body = (await res.json()) as { orders: ShopifyOrder[] };
@@ -120,7 +120,7 @@ type PdDeal = { add_time: string; pipeline_id: number };
 async function fetchPipedriveAppFormLeads(sinceIso: string, untilIso: string): Promise<PdDeal[]> {
   // Find the Application Form pipeline
   const pipRes = await fetch(`https://${PD_DOMAIN}.pipedrive.com/api/v1/pipelines?api_token=${PD_TOKEN}`, {
-    next: { revalidate: 3600 },
+    cache: "no-store",
   });
   const pips = (await pipRes.json()).data as Array<{ id: number; name: string }>;
   const appForm = pips.find((p) => /application form/i.test(p.name));
@@ -131,7 +131,7 @@ async function fetchPipedriveAppFormLeads(sinceIso: string, untilIso: string): P
   while (start < 10000) {
     const r: Response = await fetch(
       `https://${PD_DOMAIN}.pipedrive.com/api/v1/deals?api_token=${PD_TOKEN}&status=all_not_deleted&start=${start}&limit=500`,
-      { next: { revalidate: 3600 } }
+      { cache: "no-store" }
     );
     const body = (await r.json()) as { data: PdDeal[] | null };
     const batch = body.data || [];
