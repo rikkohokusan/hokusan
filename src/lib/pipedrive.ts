@@ -65,6 +65,10 @@ export type EnrichedOrg = {
   business_sector: string | null;
   owner_id: number | null;
   owner_name: string | null;
+  // Signals straight off the Pipedrive org record (no extra API calls)
+  last_activity_date: string | null;
+  activities_count: number | null;
+  open_deals_count: number | null;
 };
 
 type RawOrg = Record<string, unknown> & {
@@ -120,6 +124,9 @@ export async function listEnrichedOrgs(limit = 3000): Promise<EnrichedOrg[]> {
         business_sector: await labelFor(byName, k_sector, raw),
         owner_id: owner?.value ?? null,
         owner_name: owner?.name ?? null,
+        last_activity_date: toStr(raw.last_activity_date),
+        activities_count: toNum(raw.activities_count),
+        open_deals_count: toNum(raw.open_deals_count),
       });
       if (out.length >= limit) break;
     }

@@ -11,6 +11,12 @@ export const dynamic = "force-dynamic";
 
 const HOKUSAN_TEAM_OWNER_ID = 24063619;
 
+function daysBetween(iso: string): number {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return 9999;
+  return Math.floor((Date.now() - then) / 86400000);
+}
+
 export default async function QueuePage({
   searchParams,
 }: {
@@ -160,6 +166,8 @@ export default async function QueuePage({
                 <th className="text-right px-4 py-2 font-medium">Orders</th>
                 <th className="text-right px-4 py-2 font-medium">AOV</th>
                 <th className="text-right px-4 py-2 font-medium" title="Days since last order">Silence</th>
+                <th className="text-left px-4 py-2 font-medium" title="Days since last Pipedrive activity (email, call, meeting) on this org">Last touch</th>
+                <th className="text-center px-4 py-2 font-medium" title="Account already has an open deal being worked — skip to avoid double-touching">Open deal</th>
                 <th className="text-right px-4 py-2 font-medium" title={GLOSSARY["Personal Cadence"]}>
                   Cadence <span className="text-muted cursor-help">ⓘ</span>
                 </th>
@@ -213,6 +221,22 @@ export default async function QueuePage({
                       {o.days_since_last_order ?? "—"}
                       {silencex ? <span className="ml-1 text-xs text-muted">({silencex}×)</span> : null}
                     </td>
+                    <td className="px-4 py-3 text-xs">
+                      {o.last_activity_date
+                        ? <span className={
+                            daysBetween(o.last_activity_date) > 30 ? "text-warn" :
+                            daysBetween(o.last_activity_date) > 14 ? "text-amber-700" : "text-muted"
+                          }>{daysBetween(o.last_activity_date)}d ago</span>
+                        : <span className="text-muted">never</span>}
+                      {(o.activities_count ?? 0) > 0 ? (
+                        <span className="ml-1 text-muted">· {o.activities_count}</span>
+                      ) : null}
+                    </td>
+                    <td className="px-4 py-3 text-center text-xs">
+                      {(o.open_deals_count ?? 0) > 0
+                        ? <span className="text-good" title={`${o.open_deals_count} open deal(s)`}>● {o.open_deals_count}</span>
+                        : <span className="text-muted">—</span>}
+                    </td>
                     <td className="px-4 py-3 text-right tabular-nums text-muted">{o.personal_cadence_days ?? "—"}</td>
                     <td className="px-4 py-3">
                       {o.cadence_status ? (
@@ -231,7 +255,7 @@ export default async function QueuePage({
               })}
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="px-4 py-10 text-center text-sm text-muted">
+                  <td colSpan={14} className="px-4 py-10 text-center text-sm text-muted">
                     No accounts in this bucket for {
                       activeOwner === "all" ? "the team"
                       : activeOwner === "unassigned" ? "unassigned accounts"

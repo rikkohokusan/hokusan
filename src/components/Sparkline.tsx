@@ -37,13 +37,24 @@ export function Sparkline({
   });
   const path = points.map((p, i) => (i === 0 ? `M${p.x},${p.y}` : `L${p.x},${p.y}`)).join(" ");
 
-  // Trend direction: compare first half mean to second half mean
-  const half = Math.floor(values.length / 2);
-  const firstMean = values.slice(0, half).reduce((a, b) => a + b, 0) / (half || 1);
-  const secondMean = values.slice(half).reduce((a, b) => a + b, 0) / (values.length - half || 1);
-  const trending = firstMean === 0 ? 0 : (secondMean - firstMean) / firstMean;
-  const arrow = trending > 0.05 ? "▲" : trending < -0.05 ? "▼" : "■";
-  const arrowClass = trending > 0.05 ? "text-good" : trending < -0.05 ? "text-warn" : "text-muted";
+  // Trailing-4w vs prior-4w comparison. Wholesale is too lumpy for WoW.
+  // Needs at least 8 weeks of history; otherwise just show the sparkline without a delta.
+  let deltaPct: number | null = null;
+  if (values.length >= 8) {
+    const last4 = values.slice(-4);
+    const prior4 = values.slice(-8, -4);
+    const last4Mean = last4.reduce((a, b) => a + b, 0) / 4;
+    const prior4Mean = prior4.reduce((a, b) => a + b, 0) / 4;
+    if (prior4Mean !== 0) deltaPct = (last4Mean - prior4Mean) / prior4Mean;
+  }
+  const arrow = deltaPct == null ? "" : deltaPct > 0.02 ? "▲" : deltaPct < -0.02 ? "▼" : "■";
+  const arrowClass = deltaPct == null
+    ? "text-muted"
+    : deltaPct > 0.02
+    ? "text-good"
+    : deltaPct < -0.02
+    ? "text-warn"
+    : "text-muted";
 
   return (
     <div className="hk-card">
@@ -53,7 +64,15 @@ export function Sparkline({
       </div>
       <div className="mt-2 flex items-baseline gap-2">
         <span className="hk-number text-2xl">{format(last.value)}</span>
-        <span className={`text-xs ${arrowClass}`}>{arrow}</span>
+        {deltaPct != null ? (
+          <span
+            className={`text-xs ${arrowClass}`}
+            title="Last 4 weeks avg vs prior 4 weeks avg"
+          >
+            {arrow} {Math.abs(deltaPct * 100).toFixed(0)}%
+            <span className="ml-1 text-muted">4w</span>
+          </span>
+        ) : null}
       </div>
       <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="mt-2 block" role="img" aria-label={`${label} trend`}>
         <path d={path} fill="none" stroke="#1f4d3a" strokeWidth="1.5" />
