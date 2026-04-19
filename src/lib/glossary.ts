@@ -1,35 +1,171 @@
-// Plain-English tooltips. Definitions lifted from playbooks.md's "Account health math" section
-// so the dashboard and the internal playbook stay in sync.
+// Plain-English explainers for dashboard jargon.
+// Written for a sales team where English is a second language.
+// Grade 5 reading level. Short sentences. Concrete examples.
 
-export const GLOSSARY: Record<string, string> = {
-  // Lifecycle buckets
-  "New-Lead":          "Fresh inbound contact — no orders yet.",
-  "Unactivated-Lead":  "Applied, never ordered. Application-form origin, batch-revived semi-annually.",
-  "First-Time":        "One lifetime order. 1st→2nd is where LTV is built or lost.",
-  "Graduating-Trial":  "2-3 orders and still within 1× their cadence. Highest-leverage cross-sell window — future VIPs if nudged now.",
-  "Established-Active":"4+ lifetime orders, ordering on schedule. Stable base.",
-  "At-Risk":           "1.5× their usual cadence silent — a nudge before they go cold.",
-  "Dormant-VIP":       "6+ lifetime orders, past 2.5× cadence. Rikko personal call.",
-  "Likely-Lost":       "4×+ cadence silent, >270 days, no Pipedrive activity in 90d. Last-chance batch.",
-
-  // Cadence statuses
-  "Warm":              "Ordering on or before their usual interval.",
-  "At Risk":           "1.5× the median gap silent between their last orders.",
-  "Dormant":           "2.5× the median gap silent — actively at risk of churn.",
-  "Likely Lost":       "4×+ silent AND >270 days AND no activity 90d. Low reactivation yield.",
-
-  // Basket trend
-  "Eroding":           "Recent 3-order AOV down >25% vs the trailing 6 — hidden churn signal, more predictive than silence.",
-  "Stable":            "Recent AOV within 25% of baseline.",
-  "Growing":           "Recent AOV up >25% vs baseline — expanding wallet.",
-
-  // Top-level concepts
-  "Cadence Status":    "How on-schedule the account is vs its own personal order cadence.",
-  "Lifecycle Bucket":  "Stage in the wholesale lifecycle: new lead → first-time → trial → established → dormant/lost.",
-  "Personal Cadence":  "Median gap (days) between this account's last 3-5 orders. The promise they've made us — not a rule we impose.",
-  "Basket Trend":      "Whether their recent average order value is growing, stable, or eroding vs their baseline.",
+export type Explainer = {
+  what: string;
+  why: string;
+  example: string;
+  action: string;
+  // Position within a named stepper diagram. Renders as a tiny visual under the text.
+  diagram?: "lifecycle" | "cadence" | "basket";
 };
 
-export function glossaryFor(term: string): string | undefined {
-  return GLOSSARY[term];
+export const GLOSSARY: Record<string, Explainer> = {
+  // ---------------- Lifecycle Bucket — positions in the customer journey ----------------
+  "Lifecycle Bucket": {
+    what: "What stage a customer is at — from new lead to regular buyer to lost.",
+    why: "Different stages need different messages. A new lead needs an intro. A regular buyer needs a new product idea. Don't send the same email to both.",
+    example: "A cafe that has ordered 5 times is Established-Active. A cafe that applied but never ordered is Unactivated-Lead.",
+    action: "Match your outreach to the stage. Use the buckets below as your guide.",
+  },
+
+  "New-Lead": {
+    what: "A brand new contact. They filled out a form or reached out, but no order yet.",
+    why: "They are curious. This is when they are most likely to open your reply.",
+    example: "A bubble tea shop filled the wholesale form yesterday. Today is your best day to email them.",
+    action: "Reply fast. The first 30 minutes matter more than the next 30 days.",
+    diagram: "lifecycle",
+  },
+
+  "Unactivated-Lead": {
+    what: "Someone who asked about us a long time ago, but never ordered.",
+    why: "Cold leads rarely wake up from a single email. They need a reason to come back.",
+    example: "A bakery filled the form 8 months ago. We emailed once. Silence since.",
+    action: "Wait for a bigger campaign (like a new harvest launch) and include them in a batch. Do not waste a weekly slot on one cold email.",
+    diagram: "lifecycle",
+  },
+
+  "First-Time": {
+    what: "A customer with exactly 1 order. They tried us once.",
+    why: "The 2nd order decides everything. If they reorder, they usually stay. If they don't, they are gone.",
+    example: "Le Bleu Coffee ordered H-M2 matcha once, 40 days ago. They haven't come back yet.",
+    action: "Email asking how the tea performed. Mention the exact product they bought. Offer a smooth reorder.",
+    diagram: "lifecycle",
+  },
+
+  "Graduating-Trial": {
+    what: "A customer who has ordered 2 or 3 times and is still ordering on time.",
+    why: "This is the very best time to sell them one more product. They trust us now. A small push turns them into a regular.",
+    example: "Hundo-P Smoothies has ordered 3 times. They buy matcha canister. They are ready to try H-M3 next.",
+    action: "Contact this week. Suggest ONE extra product that fits their menu. Not a discount — a recommendation.",
+    diagram: "lifecycle",
+  },
+
+  "Established-Active": {
+    what: "A regular customer. 4 or more orders. Ordering on schedule.",
+    why: "This is our base. Safe revenue. They are already sold on us.",
+    example: "Moments Cafe orders every 3-4 weeks, same mix. Predictable, healthy account.",
+    action: "Keep delivery smooth. Maybe suggest the grade above or below what they already buy. No pushy sales.",
+    diagram: "lifecycle",
+  },
+
+  "At-Risk": {
+    what: "A regular customer who is late on their next order. Not yet gone, but slipping.",
+    why: "A quiet nudge now costs nothing. If you wait, they may go find another supplier.",
+    example: "Cafe Wanoka usually orders every 27 days. It has been 40 days. No reason given.",
+    action: "Send one friendly email. No discount. Just 'thought of you, how's stock?' — grounded in their past orders.",
+    diagram: "lifecycle",
+  },
+
+  "Dormant-VIP": {
+    what: "A big customer (6+ orders over time) who has gone quiet for a long time.",
+    why: "These are our most valuable relationships. Losing one is a big hit. Only Rikko should handle these — not a marketing email.",
+    example: "Beck's Broth ordered 40 times ceremonial matcha. Then stopped 95 days ago. No reason on file.",
+    action: "Rikko calls personally. Reference what they used to order. Ask what changed. No pitch — just real talk.",
+    diagram: "lifecycle",
+  },
+
+  "Likely-Lost": {
+    what: "A customer who has been silent for more than 4× their usual order gap AND over 270 days.",
+    why: "The odds of bringing them back are low. Spending a rep's week here has poor return.",
+    example: "A cafe that used to order every 30 days hasn't ordered in 300 days and no one has talked to them in 90 days.",
+    action: "Send one honest last-chance email. If no reply, close the file. Don't dwell.",
+    diagram: "lifecycle",
+  },
+
+  // ---------------- Cadence Status — are they on time? ----------------
+  "Cadence Status": {
+    what: "Is this customer ordering on their usual schedule, or are they late?",
+    why: "Every customer has their own rhythm. Some order every 2 weeks, some every 2 months. We compare each one to their OWN schedule.",
+    example: "If Cafe A usually orders every 30 days and it has been 32 days, that is Warm. If it has been 75 days, that is Dormant.",
+    action: "Use this to decide who needs a nudge. Warm = leave alone. At Risk = gentle nudge. Dormant = active outreach.",
+  },
+
+  "Warm": {
+    what: "On time or close to it. They are ordering when we expect them to.",
+    why: "Healthy. No outreach needed from a cadence point of view.",
+    example: "Customer orders every 30 days. Their last order was 25 days ago. Still warm.",
+    action: "Leave them alone unless there is a cross-sell opportunity (see Graduating-Trial or Established-Active).",
+    diagram: "cadence",
+  },
+
+  "At Risk": {
+    what: "Past their usual order window by a little — about 1.5× their normal gap.",
+    why: "First sign of trouble. Cheap to fix now. Expensive if ignored.",
+    example: "Usually orders every 30 days. It has been 45 days. Nothing broken yet, but the pattern broke.",
+    action: "Send a light email. Reference what they order. No discount, no pressure.",
+    diagram: "cadence",
+  },
+
+  "Dormant": {
+    what: "Way past their usual window — 2.5× their normal gap or more.",
+    why: "They are actively going cold. Without effort they will be lost in a few more weeks.",
+    example: "Usually orders every 30 days. It has been 80 days. Definitely a problem.",
+    action: "Direct outreach. If they are a VIP (6+ orders), Rikko calls personally. If not, a rep sends a personal email.",
+    diagram: "cadence",
+  },
+
+  "Likely Lost": {
+    what: "Silent for 4× their usual gap AND more than 270 days AND no one has talked to them in 90 days.",
+    why: "Reactivation almost never works this late. Time is better spent on warmer accounts.",
+    example: "Usually ordered every 30 days. Silent 300 days. Last rep activity: 6 months ago.",
+    action: "One honest 'is there anything we can do, or should we close the file?' email. Then move on.",
+    diagram: "cadence",
+  },
+
+  // ---------------- Basket Trend — is their average order going up or down? ----------------
+  "Basket Trend": {
+    what: "Is each order getting bigger, staying the same, or getting smaller?",
+    why: "This is the hidden signal of churn. Someone can order on time but slowly shrink their basket — they are testing a competitor on some items.",
+    example: "A cafe used to order $800/month. Their last 3 orders were $450 average. They are still on time, but something changed.",
+    action: "When Eroding: ask what changed. Maybe they are trying another supplier for one product. Act before the whole order leaves.",
+  },
+
+  "Growing": {
+    what: "Their recent orders are bigger than before. Average up by more than 25%.",
+    why: "Great signal. They are buying more from us. Good candidate for a next-tier product.",
+    example: "Used to order $600 average. Last 3 orders were $900 average. Basket is growing.",
+    action: "Offer a complementary product or a bigger bag size. They are ready.",
+    diagram: "basket",
+  },
+
+  "Stable": {
+    what: "Their order size is about the same as usual. Within 25% of their normal.",
+    why: "Healthy pattern. No change needed.",
+    example: "Orders are always $600-700. They just ordered $650. Normal.",
+    action: "No action needed on basket. Focus on cadence instead.",
+    diagram: "basket",
+  },
+
+  "Eroding": {
+    what: "Their recent orders are smaller than before. Average down by more than 25%.",
+    why: "Strong warning sign. More predictive than silence. They are quietly leaving.",
+    example: "Used to order $1,000 average. Last 3 orders were $600 average. Still on time — but shrinking.",
+    action: "Call or email. Ask directly: did our product change? Are you using another supplier for something? Solve it.",
+    diagram: "basket",
+  },
+
+  // ---------------- Computed concepts ----------------
+  "Personal Cadence": {
+    what: "The normal number of days between this customer's orders.",
+    why: "Every customer has their own rhythm. We measure each one against their own pattern, not a one-size-fits-all rule.",
+    example: "Cafe A orders every 30 days. Cafe B orders every 14 days. Both are healthy — on their own schedule.",
+    action: "Use this number to judge lateness. Days-since ÷ cadence = how late they are.",
+  },
+};
+
+// Short version for list views / badges when the long explainer is too much
+export function shortDescription(term: string): string | undefined {
+  return GLOSSARY[term]?.what;
 }

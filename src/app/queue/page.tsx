@@ -4,7 +4,8 @@ import { Nav } from "@/components/Nav";
 import { createClient } from "@/lib/supabase/server";
 import { listEnrichedOrgs, listPipedriveUsers } from "@/lib/pipedrive";
 import { QUEUE_BUCKETS, filterByBucket, bucketCounts, suggestedHook, pipedriveOrgUrl, type QueueBucketKey } from "@/lib/queue";
-import { GLOSSARY } from "@/lib/glossary";
+import { GlossaryPopover } from "@/components/GlossaryPopover";
+import { BackToTop } from "@/components/BackToTop";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -118,10 +119,10 @@ export default async function QueuePage({
           ))}
         </div>
 
-        {/* Bucket tabs */}
-        <div className="flex flex-wrap gap-2 border-b border-line">
+        {/* Bucket tabs — each has an explain button next to the count */}
+        <div className="flex flex-wrap gap-1 border-b border-line">
           {QUEUE_BUCKETS.map((b) => {
-            const tooltipKey =
+            const termKey =
               b.key === "vip_dormant" ? "Dormant-VIP"
               : b.key === "basket_eroding" ? "Eroding"
               : b.key === "at_risk" ? "At-Risk"
@@ -129,23 +130,22 @@ export default async function QueuePage({
               : b.key === "first_to_second" ? "First-Time"
               : b.key === "likely_lost" ? "Likely-Lost"
               : null;
-            const tip = tooltipKey ? GLOSSARY[tooltipKey] : undefined;
             return (
-              <Link
-                key={b.key}
-                href={keepOwner(b.key)}
-                title={tip}
-                className={
-                  "px-3 py-2 text-sm border-b-2 -mb-px " +
-                  (b.key === activeBucket
-                    ? "border-accent text-ink font-medium"
-                    : "border-transparent text-muted hover:text-ink")
-                }
-              >
-                {b.label}
-                <span className="ml-2 text-xs text-muted">({counts[b.key]})</span>
-                {tip ? <span className="ml-1 text-muted cursor-help">ⓘ</span> : null}
-              </Link>
+              <div key={b.key} className="flex items-center">
+                <Link
+                  href={keepOwner(b.key)}
+                  className={
+                    "px-3 py-2 text-sm border-b-2 -mb-px " +
+                    (b.key === activeBucket
+                      ? "border-accent text-ink font-medium"
+                      : "border-transparent text-muted hover:text-ink")
+                  }
+                >
+                  {b.label}
+                  <span className="ml-2 text-xs text-muted">({counts[b.key]})</span>
+                </Link>
+                {termKey ? <GlossaryPopover term={termKey} className="px-1 text-xs" /> : null}
+              </div>
             );
           })}
         </div>
@@ -168,14 +168,14 @@ export default async function QueuePage({
                 <th className="text-right px-4 py-2 font-medium" title="Days since last order">Silence</th>
                 <th className="text-left px-4 py-2 font-medium" title="Days since last Pipedrive activity (email, call, meeting) on this org">Last touch</th>
                 <th className="text-center px-4 py-2 font-medium" title="Account already has an open deal being worked — skip to avoid double-touching">Open deal</th>
-                <th className="text-right px-4 py-2 font-medium" title={GLOSSARY["Personal Cadence"]}>
-                  Cadence <span className="text-muted cursor-help">ⓘ</span>
+                <th className="text-right px-4 py-2 font-medium">
+                  <span className="inline-flex items-center gap-1">Cadence <GlossaryPopover term="Personal Cadence" /></span>
                 </th>
-                <th className="text-left px-4 py-2 font-medium" title={GLOSSARY["Cadence Status"]}>
-                  Status <span className="text-muted cursor-help">ⓘ</span>
+                <th className="text-left px-4 py-2 font-medium">
+                  <span className="inline-flex items-center gap-1">Status <GlossaryPopover term="Cadence Status" /></span>
                 </th>
-                <th className="text-left px-4 py-2 font-medium" title={GLOSSARY["Basket Trend"]}>
-                  Basket <span className="text-muted cursor-help">ⓘ</span>
+                <th className="text-left px-4 py-2 font-medium">
+                  <span className="inline-flex items-center gap-1">Basket <GlossaryPopover term="Basket Trend" /></span>
                 </th>
                 <th className="text-left px-4 py-2 font-medium">Top category</th>
                 <th className="text-left px-4 py-2 font-medium">Suggested hook</th>
@@ -186,8 +186,6 @@ export default async function QueuePage({
                 const silencex = o.personal_cadence_days && o.days_since_last_order
                   ? (o.days_since_last_order / o.personal_cadence_days).toFixed(1)
                   : null;
-                const statusTip = o.cadence_status ? GLOSSARY[o.cadence_status] : undefined;
-                const basketTip = o.basket_trend ? GLOSSARY[o.basket_trend] : undefined;
                 const badgeTone =
                   o.cadence_status === "Likely Lost" || o.cadence_status === "Dormant"
                     ? "bg-warn/10 text-warn"
@@ -240,14 +238,14 @@ export default async function QueuePage({
                     <td className="px-4 py-3 text-right tabular-nums text-muted">{o.personal_cadence_days ?? "—"}</td>
                     <td className="px-4 py-3">
                       {o.cadence_status ? (
-                        <span className={`inline-block rounded px-2 py-0.5 text-xs ${badgeTone}`} title={statusTip}>
+                        <span className={`inline-block rounded px-2 py-0.5 text-xs ${badgeTone}`}>
                           {o.cadence_status}
                         </span>
                       ) : (
                         <span className="text-muted">—</span>
                       )}
                     </td>
-                    <td className={`px-4 py-3 text-xs ${basketTone}`} title={basketTip}>{o.basket_trend ?? "—"}</td>
+                    <td className={`px-4 py-3 text-xs ${basketTone}`}>{o.basket_trend ?? "—"}</td>
                     <td className="px-4 py-3 text-xs text-muted">{o.top_product_category ?? "—"}</td>
                     <td className="px-4 py-3 text-xs max-w-xs">{suggestedHook(o)}</td>
                   </tr>
@@ -269,9 +267,10 @@ export default async function QueuePage({
         </div>
 
         <p className="text-xs text-muted">
-          Click any account name to jump to Pipedrive. Hover on jargon (ⓘ) for plain-English definitions.
+          Click any account name to jump to Pipedrive. Click ⓘ next to a term for a plain-English explainer.
         </p>
       </main>
+      <BackToTop />
     </>
   );
 }

@@ -6,7 +6,7 @@ import { Sparkline } from "@/components/Sparkline";
 import { createClient } from "@/lib/supabase/server";
 import { listEnrichedOrgs, listOpenDeals, type EnrichedOrg } from "@/lib/pipedrive";
 import { filterByBucket, pipedriveOrgUrl } from "@/lib/queue";
-import { GLOSSARY } from "@/lib/glossary";
+import { GlossaryPopover } from "@/components/GlossaryPopover";
 import { fetch12WeekTrends } from "@/lib/trends";
 
 export const runtime = "edge";
@@ -171,7 +171,7 @@ export default async function PulsePage() {
             title="Dormant VIPs"
             tone="warn"
             hint="6+ orders + dormant/likely-lost — Rikko personal call"
-            tooltip={GLOSSARY["Dormant-VIP"]}
+            termKey="Dormant-VIP"
             orgs={vipDormant.slice(0, 5)}
             total={vipDormant.length}
             queueLink="/queue?bucket=vip_dormant"
@@ -180,7 +180,7 @@ export default async function PulsePage() {
             title="Basket eroding"
             tone="warn"
             hint="Recent AOV down >25% vs baseline — hidden churn signal"
-            tooltip={GLOSSARY["Eroding"]}
+            termKey="Eroding"
             orgs={basketEroding.slice(0, 5)}
             total={basketEroding.length}
             queueLink="/queue?bucket=basket_eroding"
@@ -189,7 +189,7 @@ export default async function PulsePage() {
             title="Graduating trials"
             tone="good"
             hint="2-3 orders, still warm — highest-leverage cross-sell"
-            tooltip={GLOSSARY["Graduating-Trial"]}
+            termKey="Graduating-Trial"
             orgs={graduatingTrials.slice(0, 5)}
             total={graduatingTrials.length}
             queueLink="/queue?bucket=graduating_trial"
@@ -198,7 +198,7 @@ export default async function PulsePage() {
             title="Likely lost"
             tone="muted"
             hint="4×+ cadence silent — last-chance batch"
-            tooltip={GLOSSARY["Likely-Lost"]}
+            termKey="Likely-Lost"
             orgs={likelyLost.slice(0, 5)}
             total={likelyLost.length}
             queueLink="/queue?bucket=likely_lost"
@@ -209,9 +209,9 @@ export default async function PulsePage() {
         {/* Lifecycle bucket breakdown — rows are drill-throughs */}
         <section className="hk-card">
           <div className="flex items-baseline justify-between">
-            <div className="hk-label">
+            <div className="hk-label flex items-center gap-1">
               Accounts by Lifecycle Bucket
-              <span className="ml-1 text-muted cursor-help" title={GLOSSARY["Lifecycle Bucket"]}>ⓘ</span>
+              <GlossaryPopover term="Lifecycle Bucket" />
             </div>
             <div className="text-xs text-muted">
               {orgs.length} enriched · {unclassified} unclassified
@@ -222,7 +222,7 @@ export default async function PulsePage() {
               const bucketKey = bucketToQueueKey(bucket);
               const row = (
                 <div className="flex items-baseline justify-between border-b border-line pb-1">
-                  <span className="text-muted" title={GLOSSARY[bucket]}>{bucket}</span>
+                  <span className="text-muted">{bucket}</span>
                   <span className="hk-number">{count}</span>
                 </div>
               );
@@ -288,7 +288,7 @@ function AnomalyCard({
   title,
   tone,
   hint,
-  tooltip,
+  termKey,
   orgs,
   total,
   queueLink,
@@ -296,7 +296,7 @@ function AnomalyCard({
   title: string;
   tone: "warn" | "good" | "muted";
   hint: string;
-  tooltip?: string;
+  termKey?: string;
   orgs: EnrichedOrg[];
   total: number;
   queueLink: string;
@@ -307,19 +307,22 @@ function AnomalyCard({
 
   return (
     <div className="hk-card">
-      {/* Header is the drill-through link. Account list below uses plain <a> tags to Pipedrive. */}
-      <Link href={queueLink} className="block -m-6 p-6 pb-2 rounded-t-md hover:bg-paper/60">
-        <div className="flex items-baseline justify-between">
-          <div>
-            <div className={`hk-label ${toneClass}`} title={tooltip}>
-              {title}
-              {tooltip ? <span className="ml-1 text-muted cursor-help">ⓘ</span> : null}
+      <div className="flex items-start justify-between gap-2">
+        <Link href={queueLink} className="flex-1 -m-6 p-6 pb-0 rounded-t-md hover:bg-paper/60">
+          <div className="flex items-baseline justify-between">
+            <div>
+              <div className={`hk-label ${toneClass}`}>{title}</div>
+              <p className="mt-1 text-xs text-muted">{hint}</p>
             </div>
-            <p className="mt-1 text-xs text-muted">{hint}</p>
+            <div className="hk-number text-2xl">{total}</div>
           </div>
-          <div className="hk-number text-2xl">{total}</div>
-        </div>
-      </Link>
+        </Link>
+        {termKey ? (
+          <div className="shrink-0 -mt-1">
+            <GlossaryPopover term={termKey} />
+          </div>
+        ) : null}
+      </div>
       {orgs.length === 0 ? (
         <p className="mt-4 text-sm text-muted">Nothing urgent here.</p>
       ) : (

@@ -4,9 +4,10 @@ import { Nav } from "@/components/Nav";
 import { createClient } from "@/lib/supabase/server";
 import { listEnrichedOrgs, type EnrichedOrg } from "@/lib/pipedrive";
 import { pipedriveOrgUrl } from "@/lib/queue";
-import { GLOSSARY } from "@/lib/glossary";
+import { GlossaryPopover } from "@/components/GlossaryPopover";
 import { buildSegmentPrompt } from "@/lib/promptTemplates";
 import { DraftPromptButton } from "@/components/DraftPromptButton";
+import { BackToTop } from "@/components/BackToTop";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -58,7 +59,8 @@ export default async function CampaignsPage({
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Campaign segments</h1>
           <p className="mt-1 text-sm text-muted">
-            Segment briefs for marketing. Click a segment to see the account list + draft outreach.
+            Click <strong className="text-ink">Draft outreach</strong> on any card to get a ready-to-use AI prompt for
+            that group. Click the card name to see which accounts are inside.
           </p>
         </div>
 
@@ -93,48 +95,71 @@ export default async function CampaignsPage({
           </section>
         ) : null}
 
-        {/* Segment grid */}
+        {/* Segment grid — card body drills to accounts; Draft button opens AI prompt */}
         <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {groups.map((g) => {
-            const bucketTip = groupBy === "bucket" ? GLOSSARY[g.label] : undefined;
+            const showGlossary = groupBy === "bucket";
+            const drillHref = `/campaigns?group=${groupBy}&focus=${encodeURIComponent(g.label)}`;
             return (
-              <Link
+              <div
                 key={g.label}
-                href={`/campaigns?group=${groupBy}&focus=${encodeURIComponent(g.label)}`}
                 className={
-                  "hk-card transition hover:border-accent hover:shadow-sm " +
-                  (focus === g.label ? "border-accent" : "")
+                  "hk-card flex flex-col " + (focus === g.label ? "border-accent" : "")
                 }
               >
-                <div className="flex items-baseline justify-between">
-                  <h3 className="font-medium text-sm" title={bucketTip}>
-                    {g.label}
-                    {bucketTip ? <span className="ml-1 text-muted cursor-help">ⓘ</span> : null}
-                  </h3>
-                  <span className="hk-number text-2xl">{g.count}</span>
+                <Link
+                  href={drillHref}
+                  className="block -m-6 p-6 pb-0 rounded-t-md hover:bg-paper/60 flex-1"
+                >
+                  <div className="flex items-baseline justify-between gap-2">
+                    <h3 className="font-medium text-sm inline-flex items-center gap-1">
+                      {g.label}
+                    </h3>
+                    <span className="hk-number text-2xl">{g.count}</span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted">
+                    <span>LTV</span>
+                    <span className="text-right text-ink">{cad(g.totalLtv)}</span>
+                    <span>Avg AOV</span>
+                    <span className="text-right text-ink">{cad(g.avgAov)}</span>
+                    <span>Avg orders</span>
+                    <span className="text-right text-ink">{g.avgOrders.toFixed(1)}</span>
+                    {g.topSector ? (
+                      <>
+                        <span>Top sector</span>
+                        <span className="text-right text-ink truncate">{g.topSector}</span>
+                      </>
+                    ) : null}
+                    {g.topCategory ? (
+                      <>
+                        <span>Top product</span>
+                        <span className="text-right text-ink truncate">{g.topCategory}</span>
+                      </>
+                    ) : null}
+                  </div>
+                  <p className="mt-3 text-xs">{g.angle}</p>
+                </Link>
+
+                <div className="mt-4 pt-3 border-t border-line flex items-center justify-between gap-2">
+                  {showGlossary ? (
+                    <GlossaryPopover term={g.label} label="What is this?" className="text-xs text-muted" />
+                  ) : <span />}
+                  <DraftPromptButton
+                    segmentLabel={g.label}
+                    prompt={buildSegmentPrompt({
+                      label: g.label,
+                      groupBy,
+                      count: g.count,
+                      totalLtv: g.totalLtv,
+                      avgAov: g.avgAov,
+                      avgOrders: g.avgOrders,
+                      topSector: g.topSector,
+                      topCategory: g.topCategory,
+                      orgs: g.orgs.slice(0, 10),
+                    })}
+                  />
                 </div>
-                <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted">
-                  <span>LTV</span>
-                  <span className="text-right text-ink">{cad(g.totalLtv)}</span>
-                  <span>Avg AOV</span>
-                  <span className="text-right text-ink">{cad(g.avgAov)}</span>
-                  <span>Avg orders</span>
-                  <span className="text-right text-ink">{g.avgOrders.toFixed(1)}</span>
-                  {g.topSector ? (
-                    <>
-                      <span>Top sector</span>
-                      <span className="text-right text-ink truncate">{g.topSector}</span>
-                    </>
-                  ) : null}
-                  {g.topCategory ? (
-                    <>
-                      <span>Top product</span>
-                      <span className="text-right text-ink truncate">{g.topCategory}</span>
-                    </>
-                  ) : null}
-                </div>
-                <p className="mt-3 text-xs">{g.angle}</p>
-              </Link>
+              </div>
             );
           })}
         </section>
@@ -142,6 +167,7 @@ export default async function CampaignsPage({
         {/* Focused segment — account list */}
         {focus ? <FocusPanel groups={groups} focus={focus} groupBy={groupBy} /> : null}
       </main>
+      <BackToTop />
     </>
   );
 }
@@ -264,20 +290,6 @@ function FocusPanel({ groups, focus, groupBy }: { groups: Segment[]; focus: stri
           <h2 className="mt-1 text-lg font-semibold">{seg.label}</h2>
           <div className="mt-1 text-xs text-muted">{seg.count} accounts · {cad(seg.totalLtv)} total LTV</div>
         </div>
-        <DraftPromptButton
-          segmentLabel={seg.label}
-          prompt={buildSegmentPrompt({
-            label: seg.label,
-            groupBy,
-            count: seg.count,
-            totalLtv: seg.totalLtv,
-            avgAov: seg.avgAov,
-            avgOrders: seg.avgOrders,
-            topSector: seg.topSector,
-            topCategory: seg.topCategory,
-            orgs: seg.orgs.slice(0, 10),
-          })}
-        />
       </div>
       <p className="mt-2 text-sm">{seg.angle}</p>
 
